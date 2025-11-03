@@ -1,0 +1,16 @@
+{:paths ["src"]
+
+ :deps {org.clojure/clojure {:mvn/version "1.12.0"}
+
+        ;; File watching
+        hawk/hawk {:mvn/version "0.2.11"}
+
+        ;; HTML generation
+        hiccup/hiccup {:mvn/version "2.0.0-RC3"}
+
+        ;; Logging
+        com.taoensso/timbre {:mvn/version "6.6.1"}}
+
+ :aliases
+ {:dev {:extra-paths ["dev"]
+        :extra-deps {nrepl/nrepl {:mvn/version "1.3.0"}}}}}
