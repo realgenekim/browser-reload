@@ -41,13 +41,21 @@ Add to your `deps.edn`:
    ;; Add reload endpoint (1 line)
    ["/dev/reload-check" {:get reload/reload-check-handler}]])
 
+;; Base Ring handler (production-ready, no dev overhead)
 (def app
-  (-> (reitit/ring-handler (reitit/router routes))
-      reload/wrap-reload-script))  ;; Add middleware (1 line)
+  (reitit/ring-handler (reitit/router routes)))
 
-(defn app-dev []
-  ;; Wrap with Ring's reload middleware (1 line)
-  (wrap-reload #'app {:dirs ["src" "resources"]}))
+;; Development handler with dual auto-reload support:
+;; 1. wrap-reload-script: Injects browser JavaScript that polls /dev/reload-check
+;;    → Browser auto-refreshes when server detects file changes
+;; 2. wrap-reload: Server-side namespace reloading on each request
+;;    → Clojure code changes take effect without JVM restart
+;; Both are required: wrap-reload ensures server code is fresh,
+;; wrap-reload-script ensures browser displays the fresh code
+(def app-dev
+  (-> #'app  ;; Use var reference for REPL-driven development
+      reload/wrap-reload-script      ;; Browser-side: auto-refresh on changes
+      (wrap-reload {:dirs ["src" "resources"]})))  ;; Server-side: reload namespaces
 ```
 
 ### 3. Start Server with File Watcher (2 lines)
@@ -55,7 +63,7 @@ Add to your `deps.edn`:
 ```clojure
 (defn start-server! [port]
   (let [is-dev? (= "dev" (System/getenv "ENV"))
-        handler (if is-dev? (app-dev) #'app)]
+        handler (if is-dev? app-dev app)]  ;; app-dev is a def, not a function
 
     ;; Start file watcher in dev mode (2 lines)
     (when is-dev?
@@ -104,9 +112,46 @@ ENV=dev clojure -M:web
 └─────────────────────────────────────────────────────────────┘
 ```
 
-**Two types of reload:**
-1. **Server-side** (Ring's `wrap-reload`) - Recompiles .clj files on each request
-2. **Browser-side** (this library) - Automatically refreshes browser when files change
+## Why Two Reload Mechanisms?
+
+You need **both** Ring's `wrap-reload` and `browser-reload` for a complete development experience:
+
+### 1. `wrap-reload` (Ring) - Server-Side Code Reloading
+```clojure
+(wrap-reload #'app {:dirs ["src" "resources"]})
+```
+- **What it does**: Reloads your Clojure namespace code
+- **Where it runs**: On the server (JVM)
+- **Purpose**: Picks up code changes without restarting the server
+- **How it works**: Reloads namespaces on each HTTP request
+
+### 2. `wrap-reload-script` (this library) - Browser-Side Auto-Refresh
+```clojure
+(reload/wrap-reload-script handler)
+```
+- **What it does**: Injects JavaScript that polls for changes
+- **Where it runs**: In the browser
+- **Purpose**: Automatically refreshes the browser when files change
+- **How it works**: Polls `/dev/reload-check` endpoint every 1 second
+
+### The Full Workflow
+```
+User edits file (e.g., handler.clj)
+         ↓
+Ring's wrap-reload detects change
+         ↓
+Server reloads namespace on next request
+         ↓
+browser-reload's file watcher detects change
+         ↓
+Browser auto-refreshes via polling
+         ↓
+User sees updated page immediately
+```
+
+**Without `wrap-reload`**: Browser refreshes but shows old code (JVM hasn't reloaded) ❌
+**Without `wrap-reload-script`**: Code reloads but browser doesn't refresh (manual F5 needed) ❌
+**With both**: Edit → Save → See changes automatically ✅
 
 ## API Reference
 
