@@ -295,8 +295,6 @@ MIT License
 
 ## Credits
 
-Extracted from [podcast-player-rn](https://github.com/realgenekim/podcast-player-rn) for reusability across projects.
-
 Inspired by:
 - Ring's `wrap-reload` for server-side reloading
 - Figwheel's auto-reload for ClojureScript
