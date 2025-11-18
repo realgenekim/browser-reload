@@ -146,8 +146,8 @@
   
   The script:
   - Polls /dev/reload-check every 1000ms
-  - Compares response to last known timestamp
-  - Reloads page if timestamp changed
+  - Compares server timestamp to browser timestamp (greater-than check)
+  - Reloads page ONCE if server timestamp > browser timestamp (file changed)
   - Handles fetch errors gracefully"
   []
   (str
@@ -156,7 +156,8 @@
     "  try {\n"
     "    const resp = await fetch('/dev/reload-check');\n"
     "    const newTime = await resp.text();\n"
-    "    if (newTime !== String(lastReloadTime)) {\n"
+    "    if (parseInt(newTime) > lastReloadTime) {\n"
+    "      lastReloadTime = parseInt(newTime);\n"
     "      console.log('🔄 Reloading due to file change...');\n"
     "      window.location.reload();\n"
     "    }\n"
