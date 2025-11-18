@@ -183,18 +183,28 @@
 
 (defn wrap-reload-script
   "Middleware that injects browser reload JavaScript into HTML responses.
-  
+
+  Also adds no-cache headers to prevent infinite reload loops after server restart.
+
   Only injects if:
   - Response is HTML (Content-Type contains 'text/html')
   - Response body is a string
   - Body contains </body> tag
-  
+
   Usage:
     (def app
       (-> handler
           (reload/wrap-reload-script)))
-  
-  The injected JavaScript polls /dev/reload-check and reloads on changes."
+
+  The injected JavaScript polls /dev/reload-check and reloads on changes.
+
+  Why no-cache headers are needed:
+  - Browser caches HTML with embedded reload JavaScript + timestamp
+  - Server restarts → reload atom gets NEW timestamp
+  - Browser reloads → uses CACHED HTML with OLD timestamp
+  - Timestamps don't match → infinite reload loop
+
+  With no-cache headers, browser always fetches fresh HTML from server."
   [handler]
   (fn [request]
     (let [response (handler request)]
@@ -202,10 +212,11 @@
                (string? (:body response))
                (or (nil? (get-in response [:headers "Content-Type"]))
                    (str/includes? (str (get-in response [:headers "Content-Type"])) "text/html")))
-        (update response :body inject-reload-script)
+        (-> response
+            (update :body inject-reload-script)
+            (assoc-in [:headers "Cache-Control"] "no-store, must-revalidate"))
         response))))
 
-;; ========================================
 ;; REPL Development Helpers
 ;; ========================================
 

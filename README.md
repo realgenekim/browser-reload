@@ -23,10 +23,21 @@ Add to your `deps.edn`:
 {:deps {; ... your other deps
         }
  :aliases {:web {:extra-deps {ring/ring-devel {:mvn/version "1.12.2"}
-                              hawk/hawk {:mvn/version "0.2.11"}
-                              browser-reload/browser-reload {:local/root "../browser-reload"}}
+                              browser-reload/browser-reload
+                                {:git/url "https://github.com/realgenekim/browser-reload"
+                                 :git/tag "LATEST"}}
                  :jvm-opts ["-DENV=dev"]}}}
 ```
+
+**Dependencies explained:**
+- `ring/ring-devel` - Provides `wrap-reload` middleware for **server-side** namespace reloading (picks up code changes without JVM restart). This is a development-only dependency that YOU add to your project.
+- `browser-reload/browser-reload` - Provides `wrap-reload-script` middleware for **browser-side** auto-refresh (automatically refreshes browser when files change). Already includes `hawk` for file watching.
+
+**Why `ring/ring-devel` isn't included in browser-reload's deps.edn:**
+- It's a development-only tool (not needed in production)
+- Users might already have it or use alternatives
+- Keeps browser-reload's dependency footprint minimal
+- You control when/how to add development dependencies to your project
 
 ### 2. Add Route & Middleware (4 lines)
 
@@ -48,13 +59,14 @@ Add to your `deps.edn`:
 ;; Development handler with dual auto-reload support:
 ;; 1. wrap-reload-script: Injects browser JavaScript that polls /dev/reload-check
 ;;    → Browser auto-refreshes when server detects file changes
+;;    → Includes no-cache headers to prevent reload loops
 ;; 2. wrap-reload: Server-side namespace reloading on each request
 ;;    → Clojure code changes take effect without JVM restart
 ;; Both are required: wrap-reload ensures server code is fresh,
 ;; wrap-reload-script ensures browser displays the fresh code
 (def app-dev
   (-> #'app  ;; Use var reference for REPL-driven development
-      reload/wrap-reload-script      ;; Browser-side: auto-refresh on changes
+      reload/wrap-reload-script      ;; Browser-side: auto-refresh (includes no-cache)
       (wrap-reload {:dirs ["src" "resources"]})))  ;; Server-side: reload namespaces
 ```
 
@@ -344,3 +356,19 @@ Inspired by:
 - Ring's `wrap-reload` for server-side reloading
 - Figwheel's auto-reload for ClojureScript
 - LiveReload for the browser refresh UX
+
+## Infinite Reload Loop Prevention
+
+The `wrap-reload-script` middleware automatically includes `Cache-Control: no-store, must-revalidate` headers to prevent infinite reload loops after server restarts.
+
+### Why This Is Needed
+
+Without no-cache headers, this can happen:
+
+1. Browser caches HTML with embedded reload JavaScript containing timestamp `T1`
+2. Server restarts → reload atom gets new timestamp `T2`
+3. Browser reloads → fetches CACHED HTML (still has `T1`)
+4. JavaScript polls endpoint → sees `T2 > T1` → reloads again
+5. Loop repeats forever
+
+The no-cache headers ensure the browser always fetches fresh HTML from the server, so the embedded timestamp always matches the server's current timestamp.

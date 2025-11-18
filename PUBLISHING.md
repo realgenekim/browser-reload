@@ -4,229 +4,101 @@ Instructions for publishing new versions of the browser-reload library to GitHub
 
 ## Prerequisites
 
-- GitHub CLI (`gh`) installed and authenticated
 - Git repository with commits ready to publish
+- Push access to the remote repository
 
 ## Publishing a New Release
 
-### 1. Commit Your Changes
+Just run:
 
 ```bash
+make release
+```
+
+This automated process will:
+1. Show git status and recent commits
+2. Push commits to `origin/main`
+3. Delete old `LATEST` tag (local and remote)
+4. Create new `LATEST` tag at current HEAD
+5. Push `LATEST` tag to remote
+6. Display installation instructions
+
+### Manual Process (if needed)
+
+If you can't use the Makefile:
+
+```bash
+# 1. Commit your changes
 git add .
 git commit -m "Your commit message"
-```
 
-### 2. Get the Current Commit SHA
-
-```bash
-git rev-parse HEAD
-```
-
-This outputs the full SHA (e.g., `a794c2dd1dc505d2a400419b937d8df04c93d494`) that users will reference in their `deps.edn`.
-
-### 3. Tag the Release
-
-Create an annotated tag with version and release notes:
-
-```bash
-git tag -a v0.2.0 -m "Release v0.2.0
-
-New features:
-- Feature 1
-- Feature 2
-
-Bug fixes:
-- Fix 1
-- Fix 2
-"
-```
-
-**Version numbering** (Semantic Versioning):
-- **v0.x.0** - Breaking changes (API changes, removed features)
-- **v0.0.x** - New features, enhancements (backwards compatible)
-- **v0.0.x** - Bug fixes, documentation (no new features)
-
-### 4. Push Commits and Tags
-
-```bash
-# Push commits
+# 2. Push to main
 git push origin main
 
-# Push tags
-git push origin v0.2.0
-
-# Or push both at once
-git push origin main --tags
+# 3. Update LATEST tag
+git tag -d LATEST 2>/dev/null || true
+git push origin :refs/tags/LATEST 2>/dev/null || true
+git tag -a LATEST -m "Latest release - $(date '+%Y-%m-%d %H:%M:%S')"
+git push origin LATEST
 ```
 
-### 5. Update Documentation
+## Installation for Users
 
-Update the README.md with the new SHA if installation instructions reference a specific commit:
-
-```clojure
-;; In README.md installation example:
-browser-reload/browser-reload {:git/url "https://github.com/realgenekim/browser-reload"
-                               :git/sha "NEW-SHA-HERE"}
-```
-
-Commit and push the documentation update:
-
-```bash
-git add README.md
-git commit -m "Update README with latest SHA"
-git push origin main
-```
-
-## First-Time Publishing
-
-If you haven't published the repository yet:
-
-### 1. Create GitHub Repository
-
-```bash
-gh repo create realgenekim/browser-reload \
-  --public \
-  --source=. \
-  --description="Browser auto-reload for Clojure web development. Edit → Save → Browser refreshes automatically." \
-  --push
-```
-
-This creates the repository, sets up the remote, and pushes all commits.
-
-### 2. Tag Initial Release
-
-```bash
-git tag -a v0.1.0 -m "Initial release: browser-reload v0.1.0
-
-Features:
-- Browser auto-reload via file watching + HTTP polling
-- Ring middleware (wrap-reload-script)
-- File watcher integration (start-file-watcher!)
-- Manual REPL trigger (trigger-reload!)
-- Zero-config setup for Ring/Reitit apps
-"
-
-git push origin v0.1.0
-```
-
-### 3. Get SHA for Users
-
-```bash
-git rev-parse HEAD
-```
-
-Users add this to their `deps.edn`:
+Users always reference the `LATEST` tag in their `deps.edn`:
 
 ```clojure
 {:deps {browser-reload/browser-reload
          {:git/url "https://github.com/realgenekim/browser-reload"
-          :git/sha "a794c2dd1dc505d2a400419b937d8df04c93d494"}}}
+          :git/tag "LATEST"}}}
 ```
+
+When you run `make release`, the `LATEST` tag moves to the current commit, so users automatically get the newest version next time they clear their classpath cache.
 
 ## Updating Consumer Projects
 
-After publishing a new version, consumers can update to the new SHA:
-
-### 1. Find the Latest SHA
-
-On GitHub:
-- Go to: https://github.com/realgenekim/browser-reload
-- Click "Commits" or "Tags"
-- Copy the commit SHA or tag SHA
-
-Or locally:
-```bash
-git log --oneline | head -1
-git rev-parse v0.2.0  # Get SHA for specific tag
-```
-
-### 2. Update deps.edn in Consumer Project
-
-```clojure
-;; Change the :git/sha to the new commit SHA
-browser-reload/browser-reload {:git/url "https://github.com/realgenekim/browser-reload"
-                               :git/sha "NEW-SHA-HERE"}
-```
-
-### 3. Clear Classpath Cache
+After publishing a new release with `make release`, consumers get the update by clearing their classpath cache:
 
 ```bash
+# In consumer project
 rm -rf .cpcache
+clj -M:web  # Or whatever starts your app
 ```
 
-### 4. Test
-
-```bash
-clj -M:test  # Or whatever your test command is
-```
+Since they reference `:git/tag "LATEST"`, clearing `.cpcache` fetches the updated LATEST tag.
 
 ## Release Checklist
 
-Before publishing:
+Before running `make release`:
 
-- [ ] All tests pass locally
-- [ ] Code is formatted (`make format` if applicable)
+- [ ] All tests pass: `make runtests-once`
 - [ ] README is up to date
-- [ ] CHANGELOG is updated (if you have one)
-- [ ] Version number follows semantic versioning
-- [ ] Release notes describe changes clearly
+- [ ] CHANGELOG is updated
+- [ ] All changes committed
 
 After publishing:
 
-- [ ] Verify tag appears on GitHub
-- [ ] Test installation in a consumer project
-- [ ] Update consumer projects to new version
-- [ ] Announce release (if applicable)
+- [ ] Verify LATEST tag appears on GitHub
+- [ ] Test in consumer project (rm -rf .cpcache && clj ...)
 
 ## Troubleshooting
 
-### Tag already exists
+### Release fails with "already up-to-date"
 
-```bash
-# Delete local tag
-git tag -d v0.2.0
+If `make release` fails because there are no new commits:
+- Make sure you've committed your changes: `git add . && git commit -m "..."`
+- The LATEST tag will still update to the current HEAD
 
-# Delete remote tag
-git push origin :refs/tags/v0.2.0
+### Consumers can't fetch LATEST tag
 
-# Create new tag
-git tag -a v0.2.0 -m "..."
-git push origin v0.2.0
-```
-
-### Wrong SHA in deps.edn
-
-Users might see:
+If users see:
 ```
 Error building classpath. Could not find artifact...
 ```
 
-Solution: Ensure the SHA exists on GitHub:
-```bash
-git log --oneline | grep <short-sha>
-```
-
-If not, push the commit:
-```bash
-git push origin main
-```
-
-## Quick Reference
-
-```bash
-# Get current SHA
-git rev-parse HEAD
-
-# Tag and push
-git tag -a v0.2.0 -m "Release notes"
-git push origin v0.2.0
-
-# List all tags
-git tag -l
-
-# Show tag details
-git show v0.2.0
-```
+Solutions:
+1. Verify LATEST tag exists on GitHub: `git ls-remote --tags origin`
+2. Ensure commits are pushed: `git push origin main`
+3. Re-run: `make release`
 
 ## See Also
 
