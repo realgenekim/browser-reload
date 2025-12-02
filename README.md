@@ -1,8 +1,10 @@
 # browser-reload
 
-> Sublime browser auto-reload for Clojure web development. Edit → Save → Browser refreshes automatically.
+Sublime browser auto-reload for Clojure web development. Edit → Save → Browser refreshes automatically.
 
-Zero-friction development experience combining server-side code reloading (Ring's `wrap-reload`) with automatic browser refresh on file changes.
+If you love the incredibly fast and sublime feedback loop that tools like Figwheel or Shadow-CLJS provide, and wish you could get that same immediacy while working on server-side Clojure, this library gives you exactly that.
+
+Zero-friction development experience combining server-side code reloading (Ring’s `wrap-reload`) with just the tiniest amount of injected JavaScript to enable browser refresh on all file changes.
 
 ## What You Get
 
