@@ -20,7 +20,8 @@
    [hiccup2.core :as h]
    [taoensso.timbre :as log])
   (:import
-   (java.io File)))
+   (java.io File)
+   (java.util.concurrent Executors ScheduledFuture TimeUnit)))
 
 ;; ========================================
 ;; State & Configuration
@@ -33,23 +34,48 @@
 ;; Active file watcher instance, or nil if not running
 (defonce file-watcher (atom nil))
 
+;; Debounce state — coalesce rapid file events into a single reload
+(def ^:private debounce-delay-ms
+  "Quiet period before triggering reload. File systems often fire
+   multiple events for a single save (write + metadata update)."
+  300)
+
+(defonce ^:private debounce-executor
+  (Executors/newSingleThreadScheduledExecutor))
+
+(defonce ^:private debounce-future (atom nil))
+
 ;; ========================================
 ;; Public API
 ;; ========================================
 
 (defn trigger-reload!
   "Trigger browser reload by updating timestamp.
-  
+
   Call manually from REPL to force a browser refresh:
     (reload/trigger-reload!)
-  
+
   Returns the new timestamp."
   []
   (reset! last-reload-time (System/currentTimeMillis))
   (log/info :trigger-reload! :triggered
-    :timestamp @last-reload-time)
-  (println "🔥 Browser reload triggered!" @last-reload-time)
+            :timestamp @last-reload-time)
   @last-reload-time)
+
+(defn- schedule-debounced-reload!
+  "Schedule a reload after debounce-delay-ms. If called again before
+   the delay expires, the previous scheduled reload is cancelled.
+   This coalesces rapid file events into a single browser reload."
+  []
+  (when-let [^ScheduledFuture prev @debounce-future]
+    (.cancel prev false))
+  (reset! debounce-future
+          (.schedule debounce-executor
+                     ^Runnable (fn []
+                                 (log/info :debounced-reload :firing)
+                                 (trigger-reload!))
+                     (long debounce-delay-ms)
+                     TimeUnit/MILLISECONDS)))
 
 (defn start-file-watcher!
   "Start watching files for changes and trigger reload automatically.
@@ -71,8 +97,8 @@
     (hawk/stop! @file-watcher))
 
   (log/info :start-file-watcher! :starting
-    :paths watch-paths
-    :extensions (sort extensions))
+            :paths watch-paths
+            :extensions (sort extensions))
   (println "\n========================================")
   (println "🔍 Starting File Watcher")
   (println "========================================")
@@ -82,24 +108,22 @@
 
   (reset! file-watcher
           (hawk/watch!
-            [{:paths watch-paths
-              :handler (fn [ctx event]
+           [{:paths watch-paths
+             :handler (fn [ctx event]
                          ;; Only process :modify events
-                         (when (= (:kind event) :modify)
-                           (let [^File file (:file event)
-                                 path (.getPath file)
-                                 filename (.getName file)
-                                 ext (when (str/includes? filename ".")
-                                       (last (str/split filename #"\.")))]
+                        (when (= (:kind event) :modify)
+                          (let [^File file (:file event)
+                                path (.getPath file)
+                                filename (.getName file)
+                                ext (when (str/includes? filename ".")
+                                      (last (str/split filename #"\.")))]
 
                              ;; Only trigger reload for relevant file types
-                             (when (contains? extensions ext)
-                               (log/info :file-watcher :change-detected
-                                 :path path)
-                               (println "🔥🔥🔥 CHANGE DETECTED:" path)
-                               (println "⚡⚡⚡ TRIGGERING RELOAD!")
-                               (trigger-reload!))))
-                         ctx)}]))
+                            (when (contains? extensions ext)
+                              (log/info :file-watcher :change-detected
+                                        :path path)
+                              (schedule-debounced-reload!))))
+                        ctx)}]))
 
   (log/info :start-file-watcher! :started)
   (println "✅ File watcher started\n")
@@ -151,20 +175,20 @@
   - Handles fetch errors gracefully"
   []
   (str
-    "let lastReloadTime = " @last-reload-time ";\n"
-    "setInterval(async () => {\n"
-    "  try {\n"
-    "    const resp = await fetch('/dev/reload-check');\n"
-    "    const newTime = await resp.text();\n"
-    "    if (parseInt(newTime) > lastReloadTime) {\n"
-    "      lastReloadTime = parseInt(newTime);\n"
-    "      console.log('🔄 Reloading due to file change...');\n"
-    "      window.location.reload();\n"
-    "    }\n"
-    "  } catch (e) {\n"
-    "    console.error('Reload check failed:', e);\n"
-    "  }\n"
-    "}, 1000);"))
+   "let lastReloadTime = " @last-reload-time ";\n"
+   "setInterval(async () => {\n"
+   "  try {\n"
+   "    const resp = await fetch('/dev/reload-check');\n"
+   "    const newTime = await resp.text();\n"
+   "    if (parseInt(newTime) > lastReloadTime) {\n"
+   "      lastReloadTime = parseInt(newTime);\n"
+   "      console.log('🔄 Reloading due to file change...');\n"
+   "      window.location.reload();\n"
+   "    }\n"
+   "  } catch (e) {\n"
+   "    console.error('Reload check failed:', e);\n"
+   "  }\n"
+   "}, 1000);"))
 
 (defn- inject-reload-script
   "Inject reload script into HTML body.
