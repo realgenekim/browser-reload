@@ -208,9 +208,10 @@
 (defn wrap-reload-script
   "Middleware that injects browser reload JavaScript into HTML responses.
 
-  Also adds no-cache headers to prevent infinite reload loops after server restart.
+  Also adds no-cache headers to ALL responses (HTML, CSS, JS, images) to
+  prevent the browser from serving stale static resources after file changes.
 
-  Only injects if:
+  Only injects reload script if:
   - Response is HTML (Content-Type contains 'text/html')
   - Response body is a string
   - Body contains </body> tag
@@ -222,23 +223,24 @@
 
   The injected JavaScript polls /dev/reload-check and reloads on changes.
 
-  Why no-cache headers are needed:
-  - Browser caches HTML with embedded reload JavaScript + timestamp
-  - Server restarts → reload atom gets NEW timestamp
-  - Browser reloads → uses CACHED HTML with OLD timestamp
-  - Timestamps don't match → infinite reload loop
-
-  With no-cache headers, browser always fetches fresh HTML from server."
+  Why no-cache headers are needed on ALL responses:
+  - HTML: prevents infinite reload loops after server restart
+  - CSS/JS: ensures browser fetches fresh files after edits
+  - Without this, browser-reload detects the change and triggers a page
+    reload, but the browser serves cached CSS/JS — user sees no change"
   [handler]
   (fn [request]
     (let [response (handler request)]
-      (if (and response
-               (string? (:body response))
-               (or (nil? (get-in response [:headers "Content-Type"]))
-                   (str/includes? (str (get-in response [:headers "Content-Type"])) "text/html")))
-        (-> response
-            (update :body inject-reload-script)
-            (assoc-in [:headers "Cache-Control"] "no-store, must-revalidate"))
+      (if response
+        (let [content-type (str (get-in response [:headers "Content-Type"]))
+              is-html? (and (string? (:body response))
+                            (or (str/blank? content-type)
+                                (str/includes? content-type "text/html")))]
+          (cond-> response
+            ;; Inject reload script into HTML
+            is-html? (update :body inject-reload-script)
+            ;; No-cache on ALL responses in dev mode
+            true (assoc-in [:headers "Cache-Control"] "no-store, must-revalidate")))
         response))))
 
 ;; REPL Development Helpers
