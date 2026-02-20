@@ -165,9 +165,25 @@
 ;; JavaScript Generation
 ;; ========================================
 
+(defn- dev-banner-html
+  "Generate HTML/CSS for a fixed-position DEV banner in the upper-right corner.
+  Uses inline styles so it works without any external CSS dependencies."
+  []
+  (str
+   "<div id=\"br-dev-banner\" style=\""
+   "position:fixed;top:52px;right:12px;"
+   "background:rgba(38,38,32,0.85);color:#52B788;"
+   "padding:4px 10px;border-radius:6px;"
+   "font-family:monospace;font-size:10px;font-weight:700;"
+   "letter-spacing:1.5px;text-transform:uppercase;"
+   "z-index:999;pointer-events:none;"
+   "backdrop-filter:blur(4px);"
+   "border:1px solid rgba(82,183,136,0.2);"
+   "\">DEV</div>"))
+
 (defn- reload-script
   "Generate JavaScript code for browser auto-reload.
-  
+
   The script:
   - Polls /dev/reload-check every 1000ms
   - Compares server timestamp to browser timestamp (greater-than check)
@@ -191,14 +207,16 @@
    "}, 1000);"))
 
 (defn- inject-reload-script
-  "Inject reload script into HTML body.
-  
-  Adds a <script> tag at the end of <body> that polls for changes."
+  "Inject DEV banner and reload script into HTML body.
+
+  Adds a DEV badge (fixed upper-right corner) and a <script> tag
+  at the end of <body> that polls for changes."
   [html-body]
   (if (and html-body (str/includes? html-body "</body>"))
     (str/replace html-body
                  "</body>"
-                 (str "<script>\n" (reload-script) "\n</script></body>"))
+                 (str (dev-banner-html)
+                      "<script>\n" (reload-script) "\n</script></body>"))
     html-body))
 
 ;; ========================================
