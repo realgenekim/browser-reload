@@ -171,7 +171,7 @@
   []
   (str
    "<div id=\"br-dev-banner\" style=\""
-   "position:fixed;top:52px;right:12px;"
+   "position:absolute;top:8px;right:12px;"
    "background:rgba(38,38,32,0.85);color:#52B788;"
    "padding:4px 10px;border-radius:6px;"
    "font-family:monospace;font-size:10px;font-weight:700;"
