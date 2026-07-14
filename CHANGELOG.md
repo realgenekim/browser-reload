@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Vetoable `browser-reload:prepare` lifecycle with asynchronous `waitUntil`
+  settlement and a fail-closed timeout before page navigation.
+- `browser-reload:blocked` event for visible application feedback.
+- Effective `brStartReloadPolling()` and `brStopReloadPolling()` controls.
+
 ### Changed
 - **BREAKING**: `wrap-reload-script` now automatically includes no-cache headers
   - No need to use separate `wrap-no-cache` middleware anymore

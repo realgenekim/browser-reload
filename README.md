@@ -122,9 +122,37 @@ ENV=dev clojure -M:web
                        │
                        ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  JavaScript detects timestamp change → window.location.reload() │
+│  App prepare hooks settle or veto → guarded page reload     │
 └─────────────────────────────────────────────────────────────┘
 ```
+
+### Protect stateful editors before reload
+
+The default remains zero-configuration: pages with no listener reload
+immediately. Stateful applications can delay or veto navigation by listening
+for `browser-reload:prepare` and registering durable settlement work:
+
+```javascript
+window.addEventListener('browser-reload:prepare', event => {
+  event.detail.waitUntil(settleVisibleEditorDurably());
+});
+```
+
+The page reloads only after every registered promise succeeds. A rejection,
+`false` result, `event.detail.veto(reason)`, `event.preventDefault()`, or timeout
+blocks the reload and emits `browser-reload:blocked`. The watcher retries on a
+later poll; it never reloads merely because settlement failed.
+
+Applications that provide their own SSE/CSS refresh path can disable polling
+without monkey-patching callback names:
+
+```javascript
+brStopReloadPolling();
+```
+
+This lifecycle is intentionally application-neutral. The application decides
+what “settled” means: for an editor it should normally include visible bytes,
+document identity, revision, and a durable acknowledgement.
 
 ## Why Two Reload Mechanisms?
 
